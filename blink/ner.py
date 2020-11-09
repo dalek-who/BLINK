@@ -28,7 +28,9 @@ class NER_model:
 
 class Flair(NER_model):
     def __init__(self, parameters=None):
-        self.model = SequenceTagger.load("ner")
+        # self.model = SequenceTagger.load("ner")
+        self.model = SequenceTagger.load("/data/users/wangyuanzheng/projects/blink/models/en-ner-conll03-v0.4.pt")
+
 
     def predict(self, sentences):
         mentions = []
