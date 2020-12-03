@@ -15,6 +15,9 @@ END_ENT_TOKEN = "[END_ENT]"
 
 url2id_cache = {}
 
+proxies = {'http': 'socks5://127.0.0.1:5000',
+           'https': 'socks5://127.0.0.1:5000'}
+
 
 def _read_url(url):
     with urllib.request.urlopen(url) as response:
@@ -34,7 +37,7 @@ def _get_pageid_from_api(title, client=None):
 
     try:
         # Package the request, send the request and catch the response: r
-        r = requests.get(url)
+        r = requests.get(url, proxies=proxies)
 
         # Decode the JSON data into a dictionary: json_data
         json_data = r.json()

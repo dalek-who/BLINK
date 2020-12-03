@@ -163,6 +163,7 @@ class BiEncoderRanker(torch.nn.Module):
         # Candidate encoding is given, do not need to re-compute
         # Directly return the score of context encoding and candidate encoding
         if cand_encs is not None:
+            embedding_ctxt = embedding_ctxt.to(cand_encs.device)
             return embedding_ctxt.mm(cand_encs.t())
 
         # Train time. We compare with all elements of the batch

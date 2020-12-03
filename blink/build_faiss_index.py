@@ -4,23 +4,29 @@
 # This source code is licensed under the license found in the
 # LICENSE file in the root directory of this source tree.
 #
+
+import sys
+sys.path.append(".")
+sys.path.append("..")
+
 import argparse
 import logging
 import numpy
 import os
 import time
 import torch
+from pathlib import Path
 
-from blink.indexer.faiss_indexer import DenseFlatIndexer, DenseHNSWFlatIndexer
+from blink.index.faiss_indexer import DenseFlatIndexer, DenseHNSWFlatIndexer
 import blink.candidate_ranking.utils as utils
 
 logger = utils.get_logger()
 
 def main(params): 
-    output_path = params["output_path"]
-    if not os.path.exists(output_path):
-        os.makedirs(output_path)
-    logger = utils.get_logger(output_path)
+    output_path = Path(params["output_path"])
+    if not os.path.exists(output_path.parent):
+        os.makedirs(output_path.parent)
+    logger = utils.get_logger(output_path.parent)
 
     logger.info("Loading candidate encoding from path: %s" % params["candidate_encoding"])
     candidate_encoding = torch.load(params["candidate_encoding"])
@@ -38,7 +44,7 @@ def main(params):
     logger.info("Done indexing data.")
 
     if params.get("save_index", None):
-        index.serialize(output_path)
+        index.serialize(str(output_path.absolute()))
 
 
 if __name__ == '__main__':

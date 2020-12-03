@@ -101,7 +101,7 @@ def _annotate(ner_model, input_sentences):
 
 
 def _load_candidates(
-    entity_catalogue, entity_encoding, faiss_index=None, index_path=None, logger=None
+    entity_catalogue, entity_encoding, faiss_index=None, index_path=None, logger=None, preprocessed_catalogue=None
 ):
     # only load candidate encoding if not using faiss index
     if faiss_index is None:
@@ -121,30 +121,40 @@ def _load_candidates(
         indexer.deserialize_from(index_path)
 
     # load all the 5903527 entities
-    title2id = {}
-    id2title = {}
-    id2text = {}
-    wikipedia_id2local_id = {}
-    local_idx = 0
-    with open(entity_catalogue, "r") as fin:
-        lines = fin.readlines()
-        for line in lines:
-            entity = json.loads(line)
+    if preprocessed_catalogue is None:
+        title2id = {}
+        id2title = {}
+        id2text = {}
+        wikipedia_id2local_id = {}
+        local_idx = 0
+        with open(entity_catalogue, "r") as fin:
+            lines = fin.readlines()
+            for line in tqdm(lines, desc="entity_catalogue"):
+                entity = json.loads(line)
 
-            if "idx" in entity:
-                split = entity["idx"].split("curid=")
-                if len(split) > 1:
-                    wikipedia_id = int(split[-1].strip())
-                else:
-                    wikipedia_id = entity["idx"].strip()
+                if "idx" in entity:
+                    split = entity["idx"].split("curid=")
+                    if len(split) > 1:
+                        wikipedia_id = int(split[-1].strip())
+                    else:
+                        wikipedia_id = entity["idx"].strip()
 
-                assert wikipedia_id not in wikipedia_id2local_id
-                wikipedia_id2local_id[wikipedia_id] = local_idx
+                    assert wikipedia_id not in wikipedia_id2local_id
+                    wikipedia_id2local_id[wikipedia_id] = local_idx
 
-            title2id[entity["title"]] = local_idx
-            id2title[local_idx] = entity["title"]
-            id2text[local_idx] = entity["text"]
-            local_idx += 1
+                title2id[entity["title"]] = local_idx
+                id2title[local_idx] = entity["title"]
+                id2text[local_idx] = entity["text"]
+                local_idx += 1
+    else:
+        with open(preprocessed_catalogue) as f:
+            d = json.load(f)
+            title2id = {str(k): int(v) for k, v in d["title2id"].items()}
+            id2title = {int(k): str(v) for k, v in d["id2title"].items()}
+            id2text = {int(k): str(v) for k, v in d["id2text"].items()}
+            wikipedia_id2local_id = {int(k): int(v) for k, v in d["wikipedia_id2local_id"].items()}
+
+
     return (
         candidate_encoding,
         title2id,
@@ -227,7 +237,7 @@ def _process_biencoder_dataloader(samples, tokenizer, biencoder_params):
         tokenizer,
         biencoder_params["max_context_length"],
         biencoder_params["max_cand_length"],
-        silent=True,
+        silent=False,
         logger=None,
         debug=biencoder_params["debug"],
     )
@@ -245,6 +255,7 @@ def _run_biencoder(biencoder, dataloader, candidate_encoding, top_k=100, indexer
     all_scores = []
     for batch in tqdm(dataloader):
         context_input, _, label_ids = batch
+        context_input = context_input.to(biencoder.device)
         with torch.no_grad():
             if indexer is not None:
                 context_encoding = biencoder.encode_context(context_input).numpy()
@@ -294,6 +305,8 @@ def load_models(args, logger=None):
     with open(args.biencoder_config) as json_file:
         biencoder_params = json.load(json_file)
         biencoder_params["path_to_model"] = args.biencoder_model
+    if args.debug:
+        biencoder_params["debug"] = True
     biencoder = load_biencoder(biencoder_params)
 
     crossencoder = None
@@ -305,6 +318,8 @@ def load_models(args, logger=None):
         with open(args.crossencoder_config) as json_file:
             crossencoder_params = json.load(json_file)
             crossencoder_params["path_to_model"] = args.crossencoder_model
+        if args.debug:
+            crossencoder_params["debug"] = True
         crossencoder = load_crossencoder(crossencoder_params)
 
     # load candidate entities
@@ -318,7 +333,8 @@ def load_models(args, logger=None):
         wikipedia_id2local_id,
         faiss_indexer,
     ) = _load_candidates(
-        args.entity_catalogue, args.entity_encoding, faiss_index=args.faiss_index, index_path=args.index_path, logger=logger
+        args.entity_catalogue, args.entity_encoding, faiss_index=args.faiss_index, index_path=args.index_path, logger=logger,
+        preprocessed_catalogue=args.preprocessed_catalogue
     )
 
     return (
@@ -675,6 +691,14 @@ if __name__ == "__main__":
 
     parser.add_argument(
         "--index_path", type=str, default=None, help="path to load indexer",
+    )
+
+    parser.add_argument(
+        "--debug", dest="debug", action="store_true", help="debug mode"
+    )
+
+    parser.add_argument(
+        "--preprocessed_catalogue", type=str, default=None, help="path to load preprocessed catalogue",
     )
 
     args = parser.parse_args()

@@ -4,6 +4,8 @@
 # This source code is licensed under the license found in the
 # LICENSE file in the root directory of this source tree.
 #
+DEBUG = False  # todo
+
 import sys
 sys.path.append(".")
 sys.path.append("..")
@@ -37,8 +39,8 @@ DATASETS = [
 ]
 
 PARAMETERS = {
-    "faiss_index": None,
-    "index_path": None,
+    "faiss_index": None, # "flat",
+    "index_path": None, # "models/faiss_flat_index.pkl",
     "test_entities": None,
     "test_mentions": None,
     "interactive": False,
@@ -51,6 +53,8 @@ PARAMETERS = {
     "output_path": "output",
     "fast": False,
     "top_k": 100,
+    "debug": DEBUG,
+    "preprocessed_catalogue": "models/preprocessed_catalogue.json",  # None,
 }
 args = argparse.Namespace(**PARAMETERS)
 

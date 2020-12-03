@@ -23,7 +23,7 @@ def select_field(data, key1, key2=None):
         return [example[key1][key2] for example in data]
 
 
-def get_context_representation(
+def get_context_representation(  # 这个比较复杂的tokenize过程，而不是直接用tokenizer.tokenize，是为了在需要truncate时，mention能放在比较中间的位置，左边、右边的context长度差不多
     sample,
     tokenizer,
     max_seq_length,
@@ -42,11 +42,11 @@ def get_context_representation(
     context_left = tokenizer.tokenize(context_left)
     context_right = tokenizer.tokenize(context_right)
 
-    left_quota = (max_seq_length - len(mention_tokens)) // 2 - 1
-    right_quota = max_seq_length - len(mention_tokens) - left_quota - 2
+    left_quota = (max_seq_length - len(mention_tokens)) // 2 - 1  # mention左边的长度配额
+    right_quota = max_seq_length - len(mention_tokens) - left_quota - 2  # mention右边长度配额。2是给cls和sep的
     left_add = len(context_left)
     right_add = len(context_right)
-    if left_add <= left_quota:
+    if left_add <= left_quota:  # 依据左右实际长度，修正实际需要的配额
         if right_add > right_quota:
             right_quota += left_quota - left_add
     else:
