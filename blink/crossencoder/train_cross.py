@@ -46,8 +46,8 @@ def modify(context_input, candidate_input, max_seq_length):
     candidate_input = candidate_input.tolist()
 
     for i in range(len(context_input)):
-        cur_input = context_input[i]
-        cur_candidate = candidate_input[i]
+        cur_input = context_input[i]  # 一个mention context
+        cur_candidate = candidate_input[i]  # 一个mention context的topK candidate
         mod_input = []
         for j in range(len(cur_candidate)):
             # remove [CLS] token from candidate

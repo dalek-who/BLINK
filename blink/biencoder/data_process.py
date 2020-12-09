@@ -8,6 +8,7 @@
 import logging
 import torch
 from tqdm import tqdm, trange
+from sys import exit
 from torch.utils.data import DataLoader, TensorDataset
 
 from pytorch_transformers.tokenization_bert import BertTokenizer
@@ -116,7 +117,7 @@ def process_mention_data(
     processed_samples = []
 
     if debug:
-        samples = samples[:200]
+        samples = samples[:20]
 
     if silent:
         iter_ = samples
@@ -135,10 +136,9 @@ def process_mention_data(
             ent_start_token,
             ent_end_token,
         )
-
-        label = sample[label_key]
-        title = sample.get(title_key, None)
-        label_tokens = get_candidate_representation(
+        label = sample[label_key]  # todo
+        title = sample.get(title_key, None)  # todo，实际的key是Wikipedia_title，不是label_title
+        label_tokens = get_candidate_representation(  # todo: 有bug,label是str的WikiPedia_id，而这里需要的是实体描述。（但是在测试benchmark biEncoder时用的是训练好的实体向量，bug不会报出来）
             label, tokenizer, max_cand_length, title,
         )
         label_idx = int(sample["label_id"])

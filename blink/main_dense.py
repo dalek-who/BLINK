@@ -189,6 +189,8 @@ def __load_test(test_filename, kb2id, wikipedia_id2local_id, logger):
     with open(test_filename, "r") as fin:
         lines = fin.readlines()
         for line in lines:
+            # 最开始：label_id：真实kb_id，无label
+            # 处理后：label_id：local_id，label：真实kb_id，原label_id
             record = json.loads(line)
             record["label"] = str(record["label_id"])
 
@@ -232,6 +234,13 @@ def _get_test_samples(
 
 
 def _process_biencoder_dataloader(samples, tokenizer, biencoder_params):
+    """
+    调用process_mention_data，把结果放进DataLoader里
+    :param samples:
+    :param tokenizer:
+    :param biencoder_params:
+    :return:
+    """
     _, tensor_data = process_mention_data(
         samples,
         tokenizer,
@@ -259,7 +268,7 @@ def _run_biencoder(biencoder, dataloader, candidate_encoding, top_k=100, indexer
         with torch.no_grad():
             if indexer is not None:
                 context_encoding = biencoder.encode_context(context_input).numpy()
-                context_encoding = np.ascontiguousarray(context_encoding)
+                context_encoding = np.ascontiguousarray(context_encoding)  # 转化为内存连续的矩阵，计算速度加快
                 scores, indicies = indexer.search_knn(context_encoding, top_k)
             else:
                 scores = biencoder.score_candidate(
@@ -636,7 +645,7 @@ if __name__ == "__main__":
         "--entity_encoding",
         dest="entity_encoding",
         type=str,
-        # default="models/tac_candidate_encode_large.t7",  # TAC-KBP
+        # default="models/tac_candidate_encode_large.t7",  # TAC-KBP  # todo
         default="models/all_entities_large.t7",  # ALL WIKIPEDIA!
         help="Path to the entity catalogue.",
     )

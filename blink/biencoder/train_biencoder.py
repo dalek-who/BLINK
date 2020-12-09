@@ -19,6 +19,10 @@ from multiprocessing.pool import ThreadPool
 
 from tqdm import tqdm, trange
 from collections import OrderedDict
+from pycallgraph import PyCallGraph
+from pycallgraph.output import GraphvizOutput
+from pycallgraph import Config
+from pycallgraph import GlobbingFilter
 
 from torch.utils.data import DataLoader, RandomSampler, SequentialSampler, TensorDataset
 
@@ -311,4 +315,12 @@ if __name__ == "__main__":
     print(args)
 
     params = args.__dict__
-    main(params)
+
+    config = Config()
+    config.trace_filter = GlobbingFilter(include=[
+        '*'
+    ])
+    graphviz = GraphvizOutput()
+    graphviz.output_file = 'train_biencoder.png'
+    with PyCallGraph(output=graphviz, config=config):
+        main(params)

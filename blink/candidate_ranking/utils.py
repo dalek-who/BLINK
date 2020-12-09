@@ -4,9 +4,13 @@
 # This source code is licensed under the license found in the
 # LICENSE file in the root directory of this source tree.
 #
+import sys
+sys.path.append(".")
+sys.path.append("..")
+sys.path.append("../..")
+
 import os
 import io
-import sys
 import json
 import torch
 import logging
@@ -23,6 +27,7 @@ from blink.biencoder.biencoder import BiEncoderRanker
 
 def read_dataset(dataset_name, preprocessed_json_data_parent_folder, debug=False):
     file_name = "{}.jsonl".format(dataset_name)
+    # file_name = "{}.json".format(dataset_name)
     txt_file_path = os.path.join(preprocessed_json_data_parent_folder, file_name)
 
     samples = []

@@ -62,7 +62,7 @@ def prepare_crossencoder_candidates(
             if label == candidate_id:
                 label_id = jdx
 
-            rep = data.get_candidate_representation(
+            rep = data.get_candidate_representation(  # 这才是正确用法，用local_id索引id2text和id2title
                 id2text[candidate_id],
                 tokenizer,
                 max_cand_length,
@@ -89,7 +89,7 @@ def prepare_crossencoder_candidates(
 def filter_crossencoder_tensor_input(
     context_input_list, label_input_list, candidate_input_list
 ):
-    # remove the - 1 : examples for which gold is not among the candidates
+    # remove the - 1 : examples for which gold is not among the candidates，之前的步骤中，如果gold不在topK里，则z设置为-1
     context_input_list_filtered = [
         x
         for x, y, z in zip(context_input_list, candidate_input_list, label_input_list)

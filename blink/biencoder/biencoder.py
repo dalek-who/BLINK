@@ -177,9 +177,9 @@ class BiEncoderRanker(torch.nn.Module):
             # train on random negatives
             return embedding_ctxt.mm(embedding_cands.t())
         else:
-            # train on hard negatives
+            # train on hard negatives  # 给每个mention喂一个样本
             embedding_ctxt = embedding_ctxt.unsqueeze(1)  # batchsize x 1 x embed_size
-            embedding_cands = embedding_cands.unsqueeze(2)  # batchsize x embed_size x 2
+            embedding_cands = embedding_cands.unsqueeze(2)  # batchsize x embed_size x 1
             scores = torch.bmm(embedding_ctxt, embedding_cands)  # batchsize x 1 x 1
             scores = torch.squeeze(scores)
             return scores
