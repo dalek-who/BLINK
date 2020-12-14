@@ -163,7 +163,9 @@ class BlinkParser(argparse.ArgumentParser):
             required=True,
             help="The output directory where generated output file (model, etc.) is to be dumped.",
         )
-
+        parser.add_argument(
+            "--preprocessed_kb_catalogue", type=str, help="path to load preprocessed kb catalogue",
+        )
 
     def add_training_args(self, args=None):
         """

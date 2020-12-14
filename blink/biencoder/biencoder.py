@@ -11,13 +11,15 @@ import torch.nn as nn
 import torch.nn.functional as F
 from tqdm import tqdm
 
-from pytorch_transformers.modeling_bert import (
-    BertPreTrainedModel,
-    BertConfig,
-    BertModel,
-)
+# from pytorch_transformers.modeling_bert import (
+#     BertPreTrainedModel,
+#     BertConfig,
+#     BertModel,
+# )
+# from pytorch_transformers.tokenization_bert import BertTokenizer
 
-from pytorch_transformers.tokenization_bert import BertTokenizer
+from transformers import BertTokenizerFast #, BertTokenizer
+from transformers import BertPreTrainedModel, BertConfig, BertModel
 
 from blink.common.ranker_base import BertEncoder, get_model_obj
 from blink.common.optimizer import get_bert_optimizer
@@ -72,7 +74,8 @@ class BiEncoderModule(torch.nn.Module):
 
 class BiEncoderRanker(torch.nn.Module):
     def __init__(self, params, shared=None):
-        super(BiEncoderRanker, self).__init__()
+        # super(BiEncoderRanker, self).__init__()
+        super(self.__class__, self).__init__()
         self.params = params
         self.device = torch.device(
             "cuda" if torch.cuda.is_available() and not params["no_cuda"] else "cpu"
@@ -82,8 +85,8 @@ class BiEncoderRanker(torch.nn.Module):
         self.NULL_IDX = 0
         self.START_TOKEN = "[CLS]"
         self.END_TOKEN = "[SEP]"
-        self.tokenizer = BertTokenizer.from_pretrained(
-            params["bert_model"], do_lower_case=params["lowercase"]
+        self.tokenizer = BertTokenizerFast.from_pretrained(
+            params["bert_model"], # do_lower_case=params["lowercase"]
         )
         # init model
         self.build_model()
@@ -206,7 +209,11 @@ def to_bert_input(token_idx, null_idx):
         return token_idx, segment_idx and mask
     """
     segment_idx = token_idx * 0
-    mask = token_idx != null_idx
+    mask = (token_idx != null_idx).long()
     # nullify elements in case self.NULL_IDX was not 0
     token_idx = token_idx * mask.long()
     return token_idx, segment_idx, mask
+
+
+if __name__ == '__main__':
+    BiEncoderRanker(params=...)

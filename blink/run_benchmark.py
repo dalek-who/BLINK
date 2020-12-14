@@ -64,14 +64,27 @@ PARAMETERS = {
     "output_path": "output",
     "fast": False,
     "top_k": 100,
+    # "lowercase": True,
     "debug": DEBUG,
-    "preprocessed_catalogue": "models/preprocessed_catalogue.json",  # None,
+    "preprocessed_kb_catalogue": "models/preprocessed_catalogue.json",  # None,
 }
 args = argparse.Namespace(**PARAMETERS)
 
 logger = utils.get_logger(args.output_path)
 
 models = main_dense.load_models(args, logger)
+"""
+    biencoder,
+    biencoder_params,
+    crossencoder,
+    crossencoder_params,
+    candidate_encoding,
+    title2id,
+    id2title,
+    id2text,
+    wikipedia_id2local_id,
+    faiss_indexer,
+"""
 
 table = prettytable.PrettyTable(
     [
@@ -115,15 +128,21 @@ def main():
 
 
 if __name__ == "__main__":
-    # config = Config()
-    # config.trace_filter = GlobbingFilter(include=[
-    #     '*'
-    # ])
-    # graphviz = GraphvizOutput()
-    # graphviz.output_file = 'run_benchmark.png'
-    #
-    # with PyCallGraph(output=graphviz, config=config):
-    #     main()
-
     main()
+    # if utils.is_debug():
+    #     main()
+    # else:
+    #     # 画函数调用图
+    #     config = Config()
+    #     config.trace_filter = GlobbingFilter(include=[
+    #         '*'
+    #     ])
+    #     graphviz = GraphvizOutput()
+    #     graph_dir = "/data/users/wangyuanzheng/projects/blink-home/function_call_graph/"
+    #     graphviz.output_file = graph_dir + 'run_benchmark.png'
+    #
+    #     with PyCallGraph(output=graphviz, config=config):
+    #         main()
+
+
 

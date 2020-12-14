@@ -17,6 +17,7 @@ from blink.common.params import ENT_START_TAG, ENT_END_TAG
 def prepare_crossencoder_mentions(
     tokenizer,
     samples,
+    # lowercase: bool,
     max_context_length=32,
     mention_key="mention",
     context_key="context",
@@ -28,13 +29,14 @@ def prepare_crossencoder_mentions(
 
     for sample in tqdm(samples):
         context_tokens = data.get_context_representation(
-            sample,
-            tokenizer,
-            max_context_length,
-            mention_key,
-            context_key,
-            ent_start_token,
-            ent_end_token,
+            sample=sample,
+            tokenizer=tokenizer,
+            max_seq_length=max_context_length,
+            mention_key=mention_key,
+            context_key=context_key,
+            ent_start_token=ent_start_token,
+            ent_end_token=ent_end_token,
+            # lowercase=lowercase
         )
         tokens_ids = context_tokens["ids"]
         context_input_list.append(tokens_ids)
@@ -44,7 +46,14 @@ def prepare_crossencoder_mentions(
 
 
 def prepare_crossencoder_candidates(
-    tokenizer, labels, nns, id2title, id2text, max_cand_length=128, topk=100
+    tokenizer,
+    labels,
+    nns,
+    id2title,
+    id2text,
+    # lowercase: bool,
+    max_cand_length=128,
+    topk=100
 ):
 
     START_TOKEN = tokenizer.cls_token
@@ -62,11 +71,12 @@ def prepare_crossencoder_candidates(
             if label == candidate_id:
                 label_id = jdx
 
-            rep = data.get_candidate_representation(  # 这才是正确用法，用local_id索引id2text和id2title
-                id2text[candidate_id],
-                tokenizer,
-                max_cand_length,
-                id2title[candidate_id],
+            rep = data.get_candidate_representation(
+                candidate_desc=id2text[candidate_id],
+                tokenizer=tokenizer,
+                max_seq_length=max_cand_length,
+                candidate_title=id2title[candidate_id],
+                # lowercase=lowercase
             )
             tokens_ids = rep["ids"]
 
@@ -113,32 +123,41 @@ def filter_crossencoder_tensor_input(
 
 
 def prepare_crossencoder_data(
-    tokenizer, samples, labels, nns, id2title, id2text, keep_all=False
+    tokenizer,
+    samples,
+    labels,
+    nns,
+    id2title: dict,
+    id2text: dict,
+    # lowercase: bool,
+    keep_all: bool=False
 ):
 
     # encode mentions
-    context_input_list = prepare_crossencoder_mentions(tokenizer, samples)
+    context_input_array = prepare_crossencoder_mentions(
+        tokenizer=tokenizer, samples=samples, # lowercase=lowercase
+    )  # shape: data_num * window_size
 
     # encode candidates (output of biencoder)
-    label_input_list, candidate_input_list = prepare_crossencoder_candidates(
-        tokenizer, labels, nns, id2title, id2text
-    )
+    label_input_array, candidate_input_array = prepare_crossencoder_candidates(
+        tokenizer, labels, nns, id2title, id2text, # lowercase=lowercase
+    )  # shape: label_input_array: data_num, candidate_input_array: data_num * top_k * candidate_seq_len
 
     if not keep_all:
         # remove examples where the gold entity is not among the candidates
         (
-            context_input_list,
-            label_input_list,
-            candidate_input_list,
+            context_input_array,
+            label_input_array,
+            candidate_input_array,
         ) = filter_crossencoder_tensor_input(
-            context_input_list, label_input_list, candidate_input_list
+            context_input_array, label_input_array, candidate_input_array
         )
     else:
-        label_input_list = [0] * len(label_input_list)
+        label_input_array = [0] * len(label_input_array)
 
-    context_input = torch.LongTensor(context_input_list)
-    label_input = torch.LongTensor(label_input_list)
-    candidate_input = torch.LongTensor(candidate_input_list)
+    context_input = torch.LongTensor(context_input_array)
+    label_input = torch.LongTensor(label_input_array)
+    candidate_input = torch.LongTensor(candidate_input_array)
 
     return (
         context_input,

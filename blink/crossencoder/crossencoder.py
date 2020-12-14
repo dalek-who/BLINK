@@ -12,21 +12,35 @@ import torch.nn.functional as F
 
 from collections import OrderedDict
 from tqdm import tqdm
-from pytorch_transformers.modeling_utils import CONFIG_NAME, WEIGHTS_NAME
+# from pytorch_transformers.modeling_utils import CONFIG_NAME, WEIGHTS_NAME
+# from pytorch_transformers.modeling_bert import (
+#     BertPreTrainedModel,
+#     BertConfig,
+#     BertModel,
+# )
+#
+# from pytorch_transformers.modeling_roberta import (
+#     RobertaConfig,
+#     RobertaModel,
+# )
+#
+# from pytorch_transformers.tokenization_bert import BertTokenizer
+# from pytorch_transformers.tokenization_roberta import RobertaTokenizer
 
-from pytorch_transformers.modeling_bert import (
+
+from transformers.modeling_utils import WEIGHTS_NAME
+from transformers.configuration_utils import CONFIG_NAME
+from transformers import (
     BertPreTrainedModel,
     BertConfig,
     BertModel,
-)
 
-from pytorch_transformers.modeling_roberta import (
     RobertaConfig,
     RobertaModel,
-)
 
-from pytorch_transformers.tokenization_bert import BertTokenizer
-from pytorch_transformers.tokenization_roberta import RobertaTokenizer
+    BertTokenizerFast,
+    RobertaTokenizerFast,
+)
 
 from blink.common.ranker_base import BertEncoder, get_model_obj
 from blink.common.optimizer import get_bert_optimizer
@@ -73,10 +87,10 @@ class CrossEncoderRanker(torch.nn.Module):
         self.n_gpu = torch.cuda.device_count()
 
         if params.get("roberta"):
-            self.tokenizer = RobertaTokenizer.from_pretrained(params["bert_model"],)
+            self.tokenizer = RobertaTokenizerFast.from_pretrained(params["bert_model"],)
         else:
-            self.tokenizer = BertTokenizer.from_pretrained(
-                params["bert_model"], do_lower_case=params["lowercase"]
+            self.tokenizer = BertTokenizerFast.from_pretrained(
+                params["bert_model"],  # do_lower_case=params["lowercase"]
             )
 
         special_tokens_dict = {
@@ -157,7 +171,7 @@ def to_bert_input(token_idx, null_idx, segment_pos):
     if segment_pos > 0:
         segment_idx[:, segment_pos:] = token_idx[:, segment_pos:] > 0
 
-    mask = token_idx != null_idx
+    mask = (token_idx != null_idx).long()
     # nullify elements in case self.NULL_IDX was not 0
     # token_idx = token_idx * mask.long()
     return token_idx, segment_idx, mask

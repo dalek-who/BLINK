@@ -257,7 +257,7 @@ def main(params):
     test_samples = utils.read_dataset(params["mode"], params["data_path"])
     logger.info("Read %d test samples." % len(test_samples))
    
-    test_data, test_tensor_data = data.process_mention_data(
+    test_data, test_tensor_data = data.prepare_biencoder_data(
         test_samples,
         tokenizer,
         params["max_context_length"],

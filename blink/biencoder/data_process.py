@@ -11,7 +11,7 @@ from tqdm import tqdm, trange
 from sys import exit
 from torch.utils.data import DataLoader, TensorDataset
 
-from pytorch_transformers.tokenization_bert import BertTokenizer
+# from pytorch_transformers.tokenization_bert import BertTokenizer
 
 from blink.biencoder.zeshel_utils import world_to_id
 from blink.common.params import ENT_START_TAG, ENT_END_TAG, ENT_TITLE_TAG
@@ -28,18 +28,26 @@ def get_context_representation(  # 这个比较复杂的tokenize过程，而不�
     sample,
     tokenizer,
     max_seq_length,
+    # lowercase,
     mention_key="mention",
     context_key="context",
     ent_start_token=ENT_START_TAG,
     ent_end_token=ENT_END_TAG,
 ):
-    mention_tokens = []
-    if sample[mention_key] and len(sample[mention_key]) > 0:
-        mention_tokens = tokenizer.tokenize(sample[mention_key])
-        mention_tokens = [ent_start_token] + mention_tokens + [ent_end_token]
-
+    mention = sample[mention_key]
     context_left = sample[context_key + "_left"]
     context_right = sample[context_key + "_right"]
+
+    # if lowercase:
+    #     mention = mention.lower()
+    #     context_left = context_left.lower()
+    #     context_right = context_right.lower()
+
+    mention_tokens = []
+    if sample[mention_key] and len(sample[mention_key]) > 0:
+        mention_tokens = tokenizer.tokenize(mention)
+        mention_tokens = [ent_start_token] + mention_tokens + [ent_end_token]
+
     context_left = tokenizer.tokenize(context_left)
     context_right = tokenizer.tokenize(context_right)
 
@@ -73,14 +81,19 @@ def get_context_representation(  # 这个比较复杂的tokenize过程，而不�
 def get_candidate_representation(
     candidate_desc, 
     tokenizer, 
-    max_seq_length, 
+    max_seq_length,
+    # lowercase,
     candidate_title=None,
     title_tag=ENT_TITLE_TAG,
 ):
     cls_token = tokenizer.cls_token
     sep_token = tokenizer.sep_token
+    # if lowercase:
+    #     candidate_desc = candidate_desc.lower()
     cand_tokens = tokenizer.tokenize(candidate_desc)
     if candidate_title is not None:
+        # if lowercase:
+        #     candidate_title = candidate_title.lower()
         title_tokens = tokenizer.tokenize(candidate_title)
         cand_tokens = title_tokens + [title_tag] + cand_tokens
 
@@ -98,16 +111,20 @@ def get_candidate_representation(
     }
 
 
-def process_mention_data(
+def prepare_biencoder_data(
     samples,
     tokenizer,
     max_context_length,
     max_cand_length,
     silent,
+    id2title,
+    id2text,
+    wikipedia_id2local_id: dict,
+    # lowercase: bool,
     mention_key="mention",
     context_key="context",
-    label_key="label",
-    title_key='label_title',
+    label_key="label_id",
+    # title_key='Wikipedia_title',
     ent_start_token=ENT_START_TAG,
     ent_end_token=ENT_END_TAG,
     title_token=ENT_TITLE_TAG,
@@ -116,8 +133,8 @@ def process_mention_data(
 ):
     processed_samples = []
 
-    if debug:
-        samples = samples[:20]
+    # if debug:
+    #     samples = samples[:20]
 
     if silent:
         iter_ = samples
@@ -128,25 +145,37 @@ def process_mention_data(
 
     for idx, sample in enumerate(iter_):
         context_tokens = get_context_representation(
-            sample,
-            tokenizer,
-            max_context_length,
-            mention_key,
-            context_key,
-            ent_start_token,
-            ent_end_token,
+            sample=sample,
+            tokenizer=tokenizer,
+            max_seq_length=max_context_length,
+            mention_key=mention_key,
+            context_key=context_key,
+            ent_start_token=ent_start_token,
+            ent_end_token=ent_end_token,
+            # lowercase=lowercase
         )
-        label = sample[label_key]  # todo
-        title = sample.get(title_key, None)  # todo，实际的key是Wikipedia_title，不是label_title
-        label_tokens = get_candidate_representation(  # todo: 有bug,label是str的WikiPedia_id，而这里需要的是实体描述。（但是在测试benchmark biEncoder时用的是训练好的实体向量，bug不会报出来）
-            label, tokenizer, max_cand_length, title,
-        )
-        label_idx = int(sample["label_id"])
+
+        if "local_label_id" in sample:
+            local_label_id = sample["local_label_id"]
+        elif wikipedia_id2local_id and len(wikipedia_id2local_id) > 0:
+            key_type = type(list(wikipedia_id2local_id.keys())[0])
+            wikipedia_id = key_type(sample[label_key].strip())
+            local_label_id = wikipedia_id2local_id[wikipedia_id]
+            sample["local_label_id"] = local_label_id
+        else:
+            raise ValueError()
+        label_tokens = get_candidate_representation(
+                candidate_desc=id2text[local_label_id],
+                tokenizer=tokenizer,
+                max_seq_length=max_cand_length,
+                candidate_title=id2title[local_label_id],
+                # lowercase=lowercase,
+            )
 
         record = {
             "context": context_tokens,
             "label": label_tokens,
-            "label_idx": [label_idx],
+            "label_idx": [local_label_id],
         }
 
         if "world" in sample:

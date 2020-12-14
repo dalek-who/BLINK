@@ -8,20 +8,22 @@ import torch
 import os
 import numpy as np
 
-from pytorch_transformers.modeling_bert import (
-    BertPreTrainedModel,
-    BertConfig,
-    BertModel,
-)
-from pytorch_transformers.tokenization_bert import BertTokenizer
+# from pytorch_transformers.modeling_bert import (
+#     BertPreTrainedModel,
+#     BertConfig,
+#     BertModel,
+# )
+# from pytorch_transformers.tokenization_bert import BertTokenizer
+from transformers import BertPreTrainedModel, BertConfig, BertModel, BertTokenizer, BertTokenizerFast
 from torch.utils.data import DataLoader, SequentialSampler, TensorDataset
 from torch import nn
 from torch.nn import CrossEntropyLoss, MSELoss
 from tqdm import tqdm
 
-from pytorch_transformers.optimization import AdamW, WarmupLinearSchedule
-from pytorch_transformers.file_utils import PYTORCH_PRETRAINED_BERT_CACHE
-
+# from pytorch_transformers.optimization import AdamW, WarmupLinearSchedule
+# from pytorch_transformers.file_utils import PYTORCH_PRETRAINED_BERT_CACHE
+from transformers.optimization import AdamW, get_linear_schedule_with_warmup
+from transformers.file_utils import PYTORCH_PRETRAINED_BERT_CACHE
 
 class BertForReranking(BertPreTrainedModel):
     r"""
@@ -268,10 +270,10 @@ class BertReranker:
             correct_bias=False,
         )
 
-        scheduler = WarmupLinearSchedule(
+        scheduler = get_linear_schedule_with_warmup(
             optimizer,
-            warmup_steps=num_warmup_steps,
-            t_total=num_train_optimization_steps,
+            num_warmup_steps=num_warmup_steps,
+            num_training_steps=num_train_optimization_steps,
         )
 
         logger.info("  Num optimization steps = %d", num_train_optimization_steps)
@@ -294,7 +296,7 @@ class BertReranker:
 
     @staticmethod
     def get_tokenizer(parameters):
-        tokenizer = BertTokenizer.from_pretrained(
+        tokenizer = BertTokenizerFast.from_pretrained(
             parameters["path_to_model"], do_lower_case=parameters["lowercase_flag"]
         )
         return tokenizer

@@ -8,16 +8,17 @@ import torch
 import os
 import numpy as np
 
-from pytorch_transformers.modeling_bert import (
-    BertPreTrainedModel,
-    BertConfig,
-    BertModel,
-)
-from pytorch_transformers.tokenization_bert import BertTokenizer
-from torch import nn
-
-from pytorch_transformers.file_utils import PYTORCH_PRETRAINED_BERT_CACHE
-from pytorch_transformers.optimization import AdamW
+# from pytorch_transformers.modeling_bert import (
+#     BertPreTrainedModel,
+#     BertConfig,
+#     BertModel,
+# )
+# from pytorch_transformers.tokenization_bert import BertTokenizer
+# from torch import nn
+#
+# from pytorch_transformers.file_utils import PYTORCH_PRETRAINED_BERT_CACHE
+# from pytorch_transformers.optimization import AdamW
+from transformers.optimization import AdamW
 
 
 patterns_optimizer = {

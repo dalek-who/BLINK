@@ -20,12 +20,11 @@ import numpy as np
 from colorama import init
 from termcolor import colored
 
-import blink.ner as NER
 from torch.utils.data import DataLoader, SequentialSampler, TensorDataset
 from blink.biencoder.biencoder import BiEncoderRanker, load_biencoder
 from blink.crossencoder.crossencoder import CrossEncoderRanker, load_crossencoder
 from blink.biencoder.data_process import (
-    process_mention_data,
+    prepare_biencoder_data,
     get_candidate_representation,
 )
 import blink.candidate_ranking.utils as utils
@@ -83,8 +82,8 @@ def _annotate(ner_model, input_sentences):
     samples = []
     for mention in mentions:
         record = {}
-        record["label"] = "unknown"
-        record["label_id"] = -1
+        record["label_id"] = "unknown"
+        record["local_label_id"] = -1
         # LOWERCASE EVERYTHING !
         record["context_left"] = sentences[mention["sent_idx"]][
             : mention["start_pos"]
@@ -101,7 +100,7 @@ def _annotate(ner_model, input_sentences):
 
 
 def _load_candidates(
-    entity_catalogue, entity_encoding, faiss_index=None, index_path=None, logger=None, preprocessed_catalogue=None
+    entity_catalogue, entity_encoding, faiss_index=None, index_path=None, logger=None, preprocessed_kb_catalogue=None
 ):
     # only load candidate encoding if not using faiss index
     if faiss_index is None:
@@ -121,7 +120,7 @@ def _load_candidates(
         indexer.deserialize_from(index_path)
 
     # load all the 5903527 entities
-    if preprocessed_catalogue is None:
+    if preprocessed_kb_catalogue is None:
         title2id = {}
         id2title = {}
         id2text = {}
@@ -147,7 +146,7 @@ def _load_candidates(
                 id2text[local_idx] = entity["text"]
                 local_idx += 1
     else:
-        with open(preprocessed_catalogue) as f:
+        with open(preprocessed_kb_catalogue) as f:
             d = json.load(f)
             title2id = {str(k): int(v) for k, v in d["title2id"].items()}
             id2title = {int(k): str(v) for k, v in d["id2title"].items()}
@@ -193,11 +192,12 @@ def __load_test(test_filename, kb2id, wikipedia_id2local_id, logger):
             # 处理后：label_id：local_id，label：真实kb_id，原label_id
             record = json.loads(line)
             record["label"] = str(record["label_id"])
+            del record["label_id"]
 
             # for tac kbp we should use a separate knowledge source to get the entity id (label_id)
             if kb2id and len(kb2id) > 0:
                 if record["label"] in kb2id:
-                    record["label_id"] = kb2id[record["label"]]
+                    record["local_label_id"] = kb2id[record["label"]]
                 else:
                     continue
 
@@ -206,7 +206,7 @@ def __load_test(test_filename, kb2id, wikipedia_id2local_id, logger):
                 try:
                     key = int(record["label"].strip())
                     if key in wikipedia_id2local_id:
-                        record["label_id"] = wikipedia_id2local_id[key]
+                        record["local_label_id"] = wikipedia_id2local_id[key]
                     else:
                         continue
                 except:
@@ -233,7 +233,7 @@ def _get_test_samples(
     return test_samples
 
 
-def _process_biencoder_dataloader(samples, tokenizer, biencoder_params):
+def _process_biencoder_dataloader(tensor_data, biencoder_params):
     """
     调用process_mention_data，把结果放进DataLoader里
     :param samples:
@@ -241,15 +241,7 @@ def _process_biencoder_dataloader(samples, tokenizer, biencoder_params):
     :param biencoder_params:
     :return:
     """
-    _, tensor_data = process_mention_data(
-        samples,
-        tokenizer,
-        biencoder_params["max_context_length"],
-        biencoder_params["max_cand_length"],
-        silent=False,
-        logger=None,
-        debug=biencoder_params["debug"],
-    )
+
     sampler = SequentialSampler(tensor_data)
     dataloader = DataLoader(
         tensor_data, sampler=sampler, batch_size=biencoder_params["eval_batch_size"]
@@ -343,7 +335,7 @@ def load_models(args, logger=None):
         faiss_indexer,
     ) = _load_candidates(
         args.entity_catalogue, args.entity_encoding, faiss_index=args.faiss_index, index_path=args.index_path, logger=logger,
-        preprocessed_catalogue=args.preprocessed_catalogue
+        preprocessed_kb_catalogue=args.preprocessed_kb_catalogue
     )
 
     return (
@@ -375,6 +367,8 @@ def run(
     faiss_indexer=None,
     test_data=None,
 ):
+    if args.interactive:
+        import blink.ner as NER
 
     if not test_data and not args.test_mentions and not args.interactive:
         msg = (
@@ -400,6 +394,7 @@ def run(
             # biencoder_params["eval_batch_size"] = 1
 
             # Load NER model
+
             ner_model = NER.get_model()
 
             # Interactive
@@ -417,27 +412,41 @@ def run(
                 samples = test_data
             else:
                 # Load test mentions
-                samples = _get_test_samples(
-                    args.test_mentions,
-                    args.test_entities,
-                    title2id,
-                    wikipedia_id2local_id,
-                    logger,
-                )
-
+                # samples = _get_test_samples(
+                #     args.test_mentions,
+                #     args.test_entities,
+                #     title2id,
+                #     wikipedia_id2local_id,
+                #     logger,
+                # )
+                samples = utils.read_dataset(dataset_name=args.test_mentions, debug=args.debug)
             stopping_condition = True
+
+        # prepare the data for biencoder
+        logger.info("preparing data for biencoder")
+        _, tensor_data = prepare_biencoder_data(
+            samples=samples,
+            tokenizer=biencoder.tokenizer,
+            max_context_length=biencoder_params["max_context_length"],
+            max_cand_length=biencoder_params["max_cand_length"],
+            # lowercase=args.lowercase,
+            silent=False,
+            id2title=id2title,
+            id2text=id2text,
+            wikipedia_id2local_id=wikipedia_id2local_id,
+            logger=None,
+            debug=biencoder_params["debug"],
+        )
+        dataloader = _process_biencoder_dataloader(
+            tensor_data=tensor_data, biencoder_params=biencoder_params,
+        )
 
         # don't look at labels
         keep_all = (
             args.interactive
-            or samples[0]["label"] == "unknown"
-            or samples[0]["label_id"] < 0
-        )
-
-        # prepare the data for biencoder
-        logger.info("preparing data for biencoder")
-        dataloader = _process_biencoder_dataloader(
-            samples, biencoder.tokenizer, biencoder_params
+            or samples[0]["label_id"] == "unknown"
+            # or samples[0]["label_id"] < 0
+            or samples[0]["local_label_id"] < 0
         )
 
         # run biencoder
@@ -517,12 +526,19 @@ def run(
 
         # prepare crossencoder data
         context_input, candidate_input, label_input = prepare_crossencoder_data(
-            crossencoder.tokenizer, samples, labels, nns, id2title, id2text, keep_all,
-        )
+            tokenizer=crossencoder.tokenizer,
+            samples=samples,
+            labels=labels,
+            nns=nns,
+            id2title=id2title,
+            id2text=id2text,
+            # lowercase=args.lowercase,
+            keep_all=keep_all,
+        )  # shape: context_input: filtered_data_num * window_size, candidate_input: filtered_data_num * top_k * candidate_seq_len, label_input: filtered_data_num
 
         context_input = modify(
             context_input, candidate_input, crossencoder_params["max_seq_length"]
-        )
+        )  # shape: context_input: filtered_data_num * top_k * (window_size + candedate_seq + 特殊符号)
 
         dataloader = _process_crossencoder_dataloader(
             context_input, label_input, crossencoder_params
@@ -707,8 +723,12 @@ if __name__ == "__main__":
     )
 
     parser.add_argument(
-        "--preprocessed_catalogue", type=str, default=None, help="path to load preprocessed catalogue",
+        "--preprocessed_kb_catalogue", type=str, default=None, help="path to load preprocessed kb catalogue",
     )
+
+    # parser.add_argument(
+    #     "--lowercase", dest="lowercase", action="store_true", help="do lowercase"
+    # )
 
     args = parser.parse_args()
 

@@ -18,24 +18,42 @@ import logging
 import numpy as np
 
 from collections import OrderedDict
-from pytorch_transformers.modeling_utils import CONFIG_NAME, WEIGHTS_NAME
+# from pytorch_transformers.modeling_utils import CONFIG_NAME, WEIGHTS_NAME
+from transformers.modeling_utils import WEIGHTS_NAME
+from transformers.configuration_utils import CONFIG_NAME
 from tqdm import tqdm
 
 from blink.candidate_ranking.bert_reranking import BertReranker
 from blink.biencoder.biencoder import BiEncoderRanker
+from pathlib import Path
 
 
-def read_dataset(dataset_name, preprocessed_json_data_parent_folder, debug=False):
-    file_name = "{}.jsonl".format(dataset_name)
-    # file_name = "{}.json".format(dataset_name)
-    txt_file_path = os.path.join(preprocessed_json_data_parent_folder, file_name)
+def is_debug():
+    """
+    判断是否运行在ide debug模式下
+    """
+    gettrace = getattr(sys, 'gettrace', None)
+    if gettrace is None:
+        return False
+    elif gettrace():
+        return True
+    else:
+        return False
+
+
+def read_dataset(dataset_name, preprocessed_json_data_parent_folder=None, debug=False):
+    txt_file_path = Path(dataset_name)
+    if not txt_file_path.exists() and preprocessed_json_data_parent_folder is not None:
+        file_name = "{}.jsonl".format(dataset_name)
+        # file_name = "{}.json".format(dataset_name)
+        txt_file_path = Path(preprocessed_json_data_parent_folder) / file_name
 
     samples = []
 
     with io.open(txt_file_path, mode="r", encoding="utf-8") as file:
         for line in file:
             samples.append(json.loads(line.strip()))
-            if debug and len(samples) > 200:
+            if debug and len(samples) > 512:
                 break
 
     return samples

@@ -4,12 +4,17 @@
 # This source code is licensed under the license found in the
 # LICENSE file in the root directory of this source tree.
 #
+import sys
+sys.path.append(".")
+sys.path.append("/data/users/wangyuanzheng/projects/blink-home/blink")
+sys.path.append("/data/users/wangyuanzheng/projects/blink-home")
+
+
 import os
 import argparse
 import pickle
 import torch
 import json
-import sys
 import io
 import random
 import time
@@ -26,9 +31,14 @@ from pycallgraph import GlobbingFilter
 
 from torch.utils.data import DataLoader, RandomSampler, SequentialSampler, TensorDataset
 
-from pytorch_transformers.file_utils import PYTORCH_PRETRAINED_BERT_CACHE
-from pytorch_transformers.optimization import WarmupLinearSchedule
-from pytorch_transformers.tokenization_bert import BertTokenizer
+# from pytorch_transformers.file_utils import PYTORCH_PRETRAINED_BERT_CACHE
+# from pytorch_transformers.optimization import WarmupLinearSchedule
+# from pytorch_transformers.tokenization_bert import BertTokenizer
+
+# from transformers.file_utils import PYTORCH_PRETRAINED_BERT_CACHE
+from transformers.optimization import get_linear_schedule_with_warmup
+# from transformers.tokenization_bert import BertTokenizer
+
 
 from blink.biencoder.biencoder import BiEncoderRanker
 import logging
@@ -101,13 +111,38 @@ def get_scheduler(params, optimizer, len_train_data, logger):
     num_train_steps = int(len_train_data / batch_size / grad_acc) * epochs
     num_warmup_steps = int(num_train_steps * params["warmup_proportion"])
 
-    scheduler = WarmupLinearSchedule(
-        optimizer, warmup_steps=num_warmup_steps, t_total=num_train_steps,
-    )
+    # scheduler = WarmupLinearSchedule(
+    #     optimizer, warmup_steps=num_warmup_steps, t_total=num_train_steps,
+    # )
+    scheduler = get_linear_schedule_with_warmup(
+        optimizer=optimizer, num_warmup_steps=num_warmup_steps, num_training_steps=num_train_steps)
     logger.info(" Num optimization steps = %d" % num_train_steps)
     logger.info(" Num warmup steps = %d", num_warmup_steps)
     return scheduler
 
+# def preprocess_samples(samples: list, wikipedia_id2local_id: dict, lowercase: bool):
+#     new_samples = []
+#     for record in tqdm(samples, desc="handle label_id"):
+#         record["label"] = str(record["label_id"])
+#         del record["label_id"]
+#
+#         if wikipedia_id2local_id and len(wikipedia_id2local_id) > 0:
+#             try:
+#                 key_type = type(list(wikipedia_id2local_id.keys())[0])
+#                 key = key_type(record["label"].strip())
+#                 if key in wikipedia_id2local_id:
+#                     record["local_label_id"] = wikipedia_id2local_id[key]
+#                 else:
+#                     continue
+#             except:
+#                 continue
+#
+#         if lowercase:
+#             record["context_left"] = record["context_left"].lower()
+#             record["context_right"] = record["context_right"].lower()
+#             record["mention"] = record["mention"].lower()
+#         new_samples.append(record)
+    return new_samples
 
 def main(params):
     model_output_path = params["output_path"]
@@ -149,19 +184,33 @@ def main(params):
     if reranker.n_gpu > 0:
         torch.cuda.manual_seed_all(seed)
 
+    # load preprocessed kb
+    with open(params["preprocessed_kb_catalogue"]) as f:
+        d = json.load(f)
+        id2title = {int(k): str(v) for k, v in d["id2title"].items()}
+        id2text = {int(k): str(v) for k, v in d["id2text"].items()}
+        wikipedia_id2local_id = {k: int(v) for k, v in d["wikipedia_id2local_id"].items()}
+
     # Load train data
-    train_samples = utils.read_dataset("train", params["data_path"])
+    train_samples = utils.read_dataset("train", params["data_path"], debug=params["debug"])
+    # train_samples = preprocess_samples(
+    #     samples=train_samples, wikipedia_id2local_id=wikipedia_id2local_id, lowercase=params["lowercase"])
     logger.info("Read %d train samples." % len(train_samples))
 
-    train_data, train_tensor_data = data.process_mention_data(
-        train_samples,
-        tokenizer,
-        params["max_context_length"],
-        params["max_cand_length"],
+
+    train_data, train_tensor_data = data.prepare_biencoder_data(
+        samples=train_samples,
+        tokenizer=tokenizer,
+        max_context_length=params["max_context_length"],
+        max_cand_length=params["max_cand_length"],
+        id2title=id2title,
+        id2text=id2text,
+        wikipedia_id2local_id=wikipedia_id2local_id,
         context_key=params["context_key"],
         silent=params["silent"],
         logger=logger,
         debug=params["debug"],
+        lowercase=params["lowercase"],
     )
     if params["shuffle"]:
         train_sampler = RandomSampler(train_tensor_data)
@@ -174,18 +223,24 @@ def main(params):
 
     # Load eval data
     # TODO: reduce duplicated code here
-    valid_samples = utils.read_dataset("valid", params["data_path"])
+    valid_samples = utils.read_dataset("val", params["data_path"], debug=params["debug"])
+    # valid_samples = preprocess_samples(
+    #     samples=valid_samples, wikipedia_id2local_id=wikipedia_id2local_id, lowercase=params["lowercase"])
     logger.info("Read %d valid samples." % len(valid_samples))
 
-    valid_data, valid_tensor_data = data.process_mention_data(
-        valid_samples,
-        tokenizer,
-        params["max_context_length"],
-        params["max_cand_length"],
+    valid_data, valid_tensor_data = data.prepare_biencoder_data(
+        samples=valid_samples,
+        tokenizer=tokenizer,
+        max_context_length=params["max_context_length"],
+        max_cand_length=params["max_cand_length"],
+        id2text=id2text,
+        id2title=id2title,
+        wikipedia_id2local_id=wikipedia_id2local_id,
         context_key=params["context_key"],
         silent=params["silent"],
         logger=logger,
         debug=params["debug"],
+        lowercase=params["lowercase"],
     )
     valid_sampler = SequentialSampler(valid_tensor_data)
     valid_dataloader = DataLoader(
@@ -316,11 +371,17 @@ if __name__ == "__main__":
 
     params = args.__dict__
 
-    config = Config()
-    config.trace_filter = GlobbingFilter(include=[
-        '*'
-    ])
-    graphviz = GraphvizOutput()
-    graphviz.output_file = 'train_biencoder.png'
-    with PyCallGraph(output=graphviz, config=config):
-        main(params)
+    main(params)
+    # if utils.is_debug():
+    #     main(params)
+    # else:
+    #     config = Config()
+    #     config.trace_filter = GlobbingFilter(include=[
+    #         '*'
+    #     ])
+    #     graphviz = GraphvizOutput()
+    #     graph_dir = "/data/users/wangyuanzheng/projects/blink-home/function_call_graph/"
+    #     graphviz.output_file = graph_dir + 'train_biencoder.png'
+    #     with PyCallGraph(output=graphviz, config=config):
+    #         main(params)
+
